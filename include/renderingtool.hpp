@@ -326,9 +326,8 @@ namespace rtl
 		{
 			throw std::invalid_argument("difference between a and b is negative");
 		}
-		1, 5;
 		int k = std::rand() % (maxInclusive - minInclusive + 1) + minInclusive;
-		return std::rand();
+		return k;
 	}
 
 	bool rdb()
