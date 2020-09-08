@@ -16,6 +16,7 @@
 #include <sstream>
 #include <iostream>
 #include <ctime>
+#include <random>
 
 int RTL_WINDOW_WIDTH = 0;
 int RTL_WINDOW_HEIGHT = 0;
@@ -150,7 +151,7 @@ namespace rtl
 	GLFWwindow* init(int width, int height, bool fullscreen, const char * windowName)
 	{
 		stbi_set_flip_vertically_on_load(true);
-		srand((unsigned)time(0));
+		std::srand((unsigned)time(0));
 		RTL_WINDOW_HEIGHT = height;
 		RTL_WINDOW_WIDTH = width;
 		glfwInit();
@@ -317,6 +318,22 @@ namespace rtl
 	bool getKey(int glfwKeyCode)
 	{
 		return glfwGetKey(RTL_WINDOW, glfwKeyCode);
+	}
+
+	int rand(int minInclusive, int maxInclusive)
+	{
+		if (maxInclusive - minInclusive <= 0)
+		{
+			throw std::invalid_argument("difference between a and b is negative");
+		}
+		1, 5;
+		int k = std::rand() % (maxInclusive - minInclusive + 1) + minInclusive;
+		return std::rand();
+	}
+
+	bool rdb()
+	{
+		return std::rand() % 2;
 	}
 
 	sprite rect(int width, int height, glm::vec3 rgb)
