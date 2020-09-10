@@ -1,16 +1,16 @@
 #region vertex
 #version 410 core
 
-layout(location = 0) in vec2 pos;
+layout(location = 0) in vec3 pos;
 layout(location = 1) in vec2 textureCoord;
 
-uniform mat4 transm;
-uniform mat4 transformationMatrix;
+uniform mat4 model;
+uniform mat4 ortho;
 
 out vec2 tcf;
 
 void main() {
-	gl_Position = vec4(pos[0] + transm[3][0], pos[1] + transm[3][1], 1.0f, 1.0f) * transformationMatrix;
+	gl_Position = ortho * model * vec4(pos, 1.0f);
 	tcf = textureCoord;
 }
 
@@ -29,6 +29,7 @@ uniform int textureExists;
 
 void main()
 {
+	
 	if (textureExists == 1)
 	{
 		color = texture(inTexture, tcf);
@@ -37,5 +38,4 @@ void main()
 	{
 		color = vec4(rgb, 1.0f);
 	}
-	
 };
