@@ -17,15 +17,21 @@
 #include <iostream>
 #include <ctime>
 #include <random>
+#include "sysec.hpp"
 
-int RTL_WINDOW_WIDTH = 0;
-int RTL_WINDOW_HEIGHT = 0;
+double rtlCurrentTime, rtlDeltaTime, rtlLastTime;
+
+int rtlWindowWidth = 0;
+int rtlWindowHeight = 0;
 int RTL_UNIFORM_T_ORTHO_LOC, RTL_UNIFORM_RGB_OFFSET_LOC, RTL_UNIFORM_T_BOOL_LOC, RTL_UNIFORM_T_MODELM_LOC;
 
 glm::mat4 rtlScaleMatrix = glm::mat4(1.0f);
 glm::mat4 rtlRotMatrix = glm::mat4(1.0f);
+glm::mat4 rtlOrthoMatrix;
 
 GLFWwindow* RTL_WINDOW = NULL;
+FT_Library RTL_FREETYPE;
+FT_Face RTL_FACE;
 
 int rtlMouseX, rtlMouseY;
 
@@ -76,7 +82,7 @@ namespace glE
 		glGetShaderiv(vSID, GL_COMPILE_STATUS, &success);
 		glGetShaderiv(vSID, GL_INFO_LOG_LENGTH, &InfoLogLength);
 		if (InfoLogLength > 0) {
-			std::vector<char> VertexShaderErrorMessage(InfoLogLength + 1);
+			std::vector<char> VertexShaderErrorMessage(InfoLogLength + 1L);
 			glGetShaderInfoLog(vSID, InfoLogLength, NULL, &VertexShaderErrorMessage[0]);
 			std::cout << &VertexShaderErrorMessage[0];
 		}
@@ -122,17 +128,16 @@ namespace rtl
 {
 	struct sprite
 	{
-		int size = 0;
 		unsigned int ID = 0;
 		unsigned int tID = 0;
 		float r = 0.f, g = 0.f, b = 0.f;
 		float width = 0, height = 0;
 		float angle = 0;
 		glm::vec3 scale = glm::vec3(1.f, 1.f, 1.f);
+		glm::vec2 pos = glm::vec2(0.f, 0.f);
 		glm::vec2 pointOfRot = glm::vec2(0, 0);
-		sprite(unsigned int bufferID, int sizeInBytes, glm::vec3 rgb, float width, float height, unsigned int textureID = NULL)
+		sprite(unsigned int bufferID, glm::vec3 rgb, float width, float height, unsigned int textureID = NULL)
 		{
-			this->size = sizeInBytes;
 			this->ID = bufferID;
 			this->tID = textureID;
 			this->r = rgb[0];
@@ -141,6 +146,10 @@ namespace rtl
 			this->width = width;
 			this->height = height;
 		}
+		glm::vec2 getCenter()
+		{
+			return glm::vec2(scale[0] * width / 2, scale[1] * height / 2);
+		}
 	};
 
 	void terminate()
@@ -148,12 +157,12 @@ namespace rtl
 		glfwTerminate();
 	}
 
-	GLFWwindow* init(int width, int height, bool fullscreen, const char * windowName)
+	void init(int width, int height, bool fullscreen, const char * windowName)
 	{
 		stbi_set_flip_vertically_on_load(true);
 		std::srand((unsigned)time(0));
-		RTL_WINDOW_HEIGHT = height;
-		RTL_WINDOW_WIDTH = width;
+		rtlWindowHeight = height;
+		rtlWindowWidth = width;
 		glfwInit();
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -169,12 +178,10 @@ namespace rtl
 		{
 			std::cout << "Failed to init GLFW window" << std::endl;
 			glfwTerminate();
-			return NULL;
 		}
 		if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 		{
 			std::cout << "Failed to initialize GLAD" << std::endl;
-			return NULL;
 		}
 		glViewport(0, 0, width, height);
 		glEnable(GL_BLEND);
@@ -187,7 +194,7 @@ namespace rtl
 		RTL_UNIFORM_RGB_OFFSET_LOC = glGetUniformLocation(shaderID, "rgb");
 		RTL_UNIFORM_T_BOOL_LOC = glGetUniformLocation(shaderID, "textureExists");
 		RTL_UNIFORM_T_MODELM_LOC = glGetUniformLocation(shaderID, "model");
-		return RTL_WINDOW;
+		rtlOrthoMatrix = glm::ortho(0.0f, (float)rtlWindowWidth, (float)rtlWindowHeight, 0.0f, -1.0f, 1.f);
 	}
 
 	sprite loadTexture(const char* path, bool transparency = false)
@@ -228,13 +235,13 @@ namespace rtl
 
 		float tc[12] =
 		{
-			0.0f, 0.0f,
-			0.0f, 1.0f,
-			1.0f, 1.0f,
-
-			1.0f, 1.0f,
-			0.0f, 0.0f,
 			1.0f, 0.0f,
+			1.0f, 1.0f,
+			0.0f, 1.0f,
+
+			0.f, 1.f,
+			1.f, 0.f,
+			0.f, 0.f,
 		};
 
 		unsigned int VAO, VBO, TCBO;
@@ -252,7 +259,7 @@ namespace rtl
 		glBufferData(GL_ARRAY_BUFFER, sizeof(tc), tc, GL_STATIC_DRAW);
 		glEnableVertexAttribArray(1);
 		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
-		return sprite(VAO, (int)sizeof(vert), glm::vec3(), width, height, textureID);
+		return sprite(VAO, glm::vec3(), width, height, textureID);
 	}
 
 	void draw(sprite sprite, int x, int y)
@@ -268,14 +275,41 @@ namespace rtl
 			glBindTexture(GL_TEXTURE_2D, sprite.tID);
 			glUniform1i(RTL_UNIFORM_T_BOOL_LOC, 1);
 		}
-		glm::mat4 projection = glm::mat4(1.0f);
-		projection = glm::ortho(0.0f, (float)RTL_WINDOW_WIDTH, (float)RTL_WINDOW_HEIGHT, 0.0f, .0f, 1.f);
 		glm::mat4 trans = glm::translate(glm::mat4(1.0f), glm::vec3((float)x, (float)y, 0.f));
-		trans = glm::translate(trans, glm::vec3(sprite.pointOfRot[0], sprite.pointOfRot[1], 0.f));
-		trans = glm::rotate(trans, glm::radians(sprite.angle), glm::vec3(0.0f, 0.0f, 1.0f));
-		trans = glm::translate(trans, glm::vec3(-sprite.pointOfRot[0], -sprite.pointOfRot[1], 0.f));
+		if (sprite.angle != 0)
+		{
+			trans = glm::translate(trans, glm::vec3(sprite.pointOfRot[0], sprite.pointOfRot[1], 0.f));
+			trans = glm::rotate(trans, glm::radians(sprite.angle), glm::vec3(0.0f, 0.0f, 1.0f));
+			trans = glm::translate(trans, glm::vec3(-sprite.pointOfRot[0], -sprite.pointOfRot[1], 0.f));
+		}
 		trans = glm::scale(trans, glm::vec3(sprite.width * sprite.scale[0], sprite.height * sprite.scale[1], 0.f));
-		glUniformMatrix4fv(RTL_UNIFORM_T_ORTHO_LOC, 1, GL_FALSE, &projection[0][0]);
+		glUniformMatrix4fv(RTL_UNIFORM_T_ORTHO_LOC, 1, GL_FALSE, &rtlOrthoMatrix[0][0]);
+		glUniformMatrix4fv(RTL_UNIFORM_T_MODELM_LOC, 1, GL_FALSE, &trans[0][0]);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	}
+
+	void draw(sprite sprite)
+	{
+		glBindVertexArray(sprite.ID);
+		if (sprite.tID == 0)
+		{
+			glUniform1i(RTL_UNIFORM_T_BOOL_LOC, 0);
+			glUniform3f(RTL_UNIFORM_RGB_OFFSET_LOC, sprite.r, sprite.g, sprite.b);
+		}
+		else
+		{
+			glBindTexture(GL_TEXTURE_2D, sprite.tID);
+			glUniform1i(RTL_UNIFORM_T_BOOL_LOC, 1);
+		}
+		glm::mat4 trans = glm::translate(glm::mat4(1.0f), glm::vec3((float)sprite.pos[0], (float)sprite.pos[1], 0.f));
+		if (sprite.angle != 0)
+		{
+			trans = glm::translate(trans, glm::vec3(sprite.pointOfRot[0], sprite.pointOfRot[1], 0.f));
+			trans = glm::rotate(trans, glm::radians(sprite.angle), glm::vec3(0.0f, 0.0f, 1.0f));
+			trans = glm::translate(trans, glm::vec3(-sprite.pointOfRot[0], -sprite.pointOfRot[1], 0.f));
+		}
+		trans = glm::scale(trans, glm::vec3(sprite.width * sprite.scale[0], sprite.height * sprite.scale[1], 0.f));
+		glUniformMatrix4fv(RTL_UNIFORM_T_ORTHO_LOC, 1, GL_FALSE, &rtlOrthoMatrix[0][0]);
 		glUniformMatrix4fv(RTL_UNIFORM_T_MODELM_LOC, 1, GL_FALSE, &trans[0][0]);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 	}
@@ -290,6 +324,12 @@ namespace rtl
 		return glfwGetTime();
 	}
 
+	double getDeltaTime()
+	{
+		rtlDeltaTime = rtlCurrentTime - rtlLastTime;
+		return rtlDeltaTime;
+	}
+
 	bool shouldExit()
 	{
 		return glfwWindowShouldClose(RTL_WINDOW);
@@ -298,11 +338,26 @@ namespace rtl
 	void clearBuffers()
 	{
 		glClear(GL_COLOR_BUFFER_BIT);
+		rtlCurrentTime = getTime();
 	}
 
 	void poll()
 	{
 		glfwPollEvents();
+		rtlLastTime = rtlCurrentTime;
+	}
+
+	void setVSync(bool onOrOff)
+	{
+		bool b = onOrOff;
+		if (b)
+		{
+			glfwSwapInterval(1);
+		}
+		else
+		{
+			glfwSwapInterval(0);
+		}
 	}
 
 	void flipDisplay()
@@ -313,6 +368,15 @@ namespace rtl
 	void setClearColor(float r, float g, float b)
 	{
 		glClearColor(r / 255.f, g / 255.f, b / 255.f, 1.f);
+	}
+
+	void setWindowSize(int width, int height)
+	{
+		rtlWindowWidth = width;
+		rtlWindowHeight = height;
+		glfwSetWindowSize(RTL_WINDOW, width, height);
+		glViewport(0, 0, width, height);
+		rtlOrthoMatrix = glm::ortho(0.0f, (float)rtlWindowWidth, (float)rtlWindowHeight, 0.0f, .0f, 1.f);
 	}
 
 	bool getKey(int glfwKeyCode)
@@ -359,7 +423,7 @@ namespace rtl
 		glBindVertexArray(VAO);
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-		return sprite(VAO, (int)sizeof(vert), rgbc, width, height);
+		return sprite(VAO, rgbc, width, height);
 	}
 }
 
