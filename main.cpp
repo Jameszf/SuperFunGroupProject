@@ -1,10 +1,12 @@
+#include <iostream>
+#include "include/classes.hpp"
 #include "renderingtool.hpp"
 #include "gstruct.hpp"
 
 int main()
 {
-	rtl::init(800, 600, false, "Slay the Spaghetti");
 	//FreeConsole();
+	rtl::init(800, 600, false, "Slay the Spaghetti");
 	if (!sysc::pathIsValid("cfg"))
 	{
 		sysc::raise("cfg folder missing");
@@ -14,9 +16,6 @@ int main()
 		sysc::raise("assets folder missing");
 	}
 	rtl::setClearColor(125.f, 75.f, 235.f);
-
-	//
-
 	while (!rtl::shouldExit())
 	{
 		rtl::clearBuffers();
